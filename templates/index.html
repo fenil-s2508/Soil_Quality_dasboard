@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🌱 Soil &amp; Crop Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════
+     SECTION A — LOGIN OVERLAY
+     Shown first. Fades out after successful login.
+════════════════════════════════════════════════════════ -->
+<div class="login-overlay" id="loginOverlay">
+
+  <div class="scene">
+    <div class="sun"></div>
+    <div class="cloud cloud1"></div>
+    <div class="cloud cloud2"></div>
+    <div class="grass-strip"></div>
+    <div class="ground-strip"></div>
+    <div class="tree-group left"><div class="leaves"></div><div class="trunk"></div></div>
+    <div class="tree-group right"><div class="leaves"></div><div class="trunk"></div></div>
+  </div>
+
+  <div class="login-card">
+    <span class="login-icon">🌱</span>
+    <h2 class="login-title">Soil Monitoring</h2>
+    <p class="login-sub">Sign in to access your dashboard</p>
+    <div class="login-error" id="loginError">Invalid username or password.</div>
+    <input type="text"     id="loginUser" placeholder="Username" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password">
+    <button onclick="doLogin()">Login</button>
+  </div>
+
+</div>
+
+
+<!-- ════════════════════════════════════════════════════════
+     SECTION B — DASHBOARD
+     Hidden until login succeeds.
+════════════════════════════════════════════════════════ -->
+<div class="dashboard" id="dashboard">
+
+  <div class="bg-orb orb-1"></div>
+  <div class="bg-orb orb-2"></div>
+  <div class="bg-orb orb-3"></div>
+  <div class="particles">
+    <span style="left:10%;animation-delay:0s"></span>
+    <span style="left:25%;animation-delay:3s"></span>
+    <span style="left:50%;animation-delay:6s"></span>
+    <span style="left:75%;animation-delay:9s"></span>
+    <span style="left:90%;animation-delay:12s"></span>
+  </div>
+
+  <div class="container">
+
+    <!-- 1. HEADER -->
+    <header class="site-header reveal" style="--d:0">
+      <div class="header-left">
+        <div class="header-icon">🌱</div>
+        <div>
+          <h1>Soil &amp; Crop Dashboard</h1>
+          <p class="header-sub">Live sensor monitoring via ThingSpeak</p>
+        </div>
+      </div>
+      <div class="header-center">
+        <div class="clock-box">
+          <div id="liveClock"></div>
+          <div id="liveDate"></div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="live-badge"><span class="pulse-dot"></span> Live</div>
+        <div class="last-updated" id="lastUpdated">Fetching…</div>
+        <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+        <button class="logout-btn" onclick="doLogout()">Logout</button>
+      </div>
+    </header>
+
+    <!-- 2. AI BANNER -->
+    <div class="ai-banner reveal" style="--d:1">
+      <div class="ai-icon">💡</div>
+      <div class="ai-text">
+        <span class="ai-label">AI Analysis</span>
+        <span class="ai-body">
+          Based on current NPK &amp; pH levels, best crop to plant:
+          <strong id="smartCrop">{{ suggestion.icon }} {{ suggestion.name }}</strong>
+        </span>
+      </div>
+    </div>
+
+    <!-- 3. METRIC CARDS -->
+    <div class="metrics-row">
+      <div class="metric-card reveal" style="--d:2">
+        <div class="metric-icon-wrap soil-ph">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+        </div>
+        <div class="metric-body">
+          <div class="metric-label">Soil pH</div>
+          <div class="metric-value-row">
+            <span class="metric-value" id="val-ph">{{ "%.2f"|format(soil.pH) }}</span>
+            <span class="metric-unit">pH</span>
+          </div>
+          <div class="metric-bar"><div class="metric-fill soil-ph-fill" id="bar-ph" style="width:{{ (soil.pH/14*100)|round(1) }}%"></div></div>
+        </div>
+      </div>
+      <div class="metric-card reveal" style="--d:2.5">
+        <div class="metric-icon-wrap soil-n">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
+        <div class="metric-body">
+          <div class="metric-label">Nitrogen (N)</div>
+          <div class="metric-value-row">
+            <span class="metric-value" id="val-n">{{ soil.N|round(1) }}</span>
+            <span class="metric-unit">mg/kg</span>
+          </div>
+          <div class="metric-bar"><div class="metric-fill soil-n-fill" id="bar-n" style="width:{{ [soil.N/150*100,100]|min|round(1) }}%"></div></div>
+        </div>
+      </div>
+      <div class="metric-card reveal" style="--d:3">
+        <div class="metric-icon-wrap soil-p">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+        </div>
+        <div class="metric-body">
+          <div class="metric-label">Phosphorus (P)</div>
+          <div class="metric-value-row">
+            <span class="metric-value" id="val-p">{{ soil.P|round(1) }}</span>
+            <span class="metric-unit">mg/kg</span>
+          </div>
+          <div class="metric-bar"><div class="metric-fill soil-p-fill" id="bar-p" style="width:{{ [soil.P/150*100,100]|min|round(1) }}%"></div></div>
+        </div>
+      </div>
+      <div class="metric-card reveal" style="--d:3.5">
+        <div class="metric-icon-wrap soil-k">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <div class="metric-body">
+          <div class="metric-label">Potassium (K)</div>
+          <div class="metric-value-row">
+            <span class="metric-value" id="val-k">{{ soil.K|round(1) }}</span>
+            <span class="metric-unit">mg/kg</span>
+          </div>
+          <div class="metric-bar"><div class="metric-fill soil-k-fill" id="bar-k" style="width:{{ [soil.K/200*100,100]|min|round(1) }}%"></div></div>
+        </div>
+      </div>
+      <div class="metric-card reveal" style="--d:4">
+        <div class="metric-icon-wrap soil-temp">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 00-5 0v11.26a4.5 4.5 0 105 0z"/></svg>
+        </div>
+        <div class="metric-body">
+          <div class="metric-label">Temperature</div>
+          <div class="metric-value-row">
+            <span class="metric-value" id="val-temp">{{ "%.1f"|format(soil.Temp) }}</span>
+            <span class="metric-unit">°C</span>
+          </div>
+          <div class="metric-bar"><div class="metric-fill soil-temp-fill" id="bar-temp" style="width:{{ [soil.Temp/50*100,100]|min|round(1) }}%"></div></div>
+        </div>
+      </div>
+      <div class="metric-card reveal" style="--d:4.5">
+        <div class="metric-icon-wrap soil-moist">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>
+        </div>
+        <div class="metric-body">
+          <div class="metric-label">Moisture</div>
+          <div class="metric-value-row">
+            <span class="metric-value" id="val-moist">{{ soil.Moisture|round(1) }}</span>
+            <span class="metric-unit">raw</span>
+          </div>
+          <div class="metric-bar"><div class="metric-fill soil-moist-fill" id="bar-moist" style="width:{{ [soil.Moisture/500*100,100]|min|round(1) }}%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. GAUGE ROW -->
+    <div class="gauge-row reveal" style="--d:5">
+      <div class="gauge-card">
+        <div class="gauge-circle" style="--percent:75"><span>75%</span></div>
+        <p>Soil Health</p>
+      </div>
+      <div class="gauge-card">
+        <div class="gauge-circle" style="--percent:60"><span>60%</span></div>
+        <p>Crop Suitability</p>
+      </div>
+      <div class="gauge-card">
+        <div class="gauge-circle" style="--percent:82"><span>82%</span></div>
+        <p>Nutrient Balance</p>
+      </div>
+      <div class="gauge-card">
+        <div class="gauge-circle" style="--percent:91"><span>91%</span></div>
+        <p>Sensor Accuracy</p>
+      </div>
+    </div>
+
+    <!-- 5. CHART + CROP SELECTOR -->
+    <div class="content-grid">
+      <div class="card chart-card reveal" style="--d:6">
+        <div class="card-header">
+          <h2>Soil Parameters</h2>
+          <div class="chart-toggle">
+            <button class="toggle-btn active" id="btnBar"   onclick="switchChart('bar')">Bar</button>
+            <button class="toggle-btn"        id="btnRadar" onclick="switchChart('radar')">Radar</button>
+          </div>
+        </div>
+        <div class="chart-wrap"><canvas id="soilChart"></canvas></div>
+      </div>
+      <div class="card crop-card reveal" style="--d:7">
+        <div class="card-header"><h2>Manual Analysis</h2></div>
+        <input type="text" id="cropSearch" class="crop-search-box"
+               placeholder="Search crops (e.g. Rice, Mango)…" onkeyup="filterCrops()">
+        <div class="crop-scroll-area">
+          <div class="crop-grid">
+            {% for c in crops %}
+            <button class="crop-btn" data-crop="{{ c }}" data-name="{{ c }}"
+                    onclick="fetchCrop('{{ c }}', this)">
+              <span class="crop-emoji">{{ crop_icons[c] if crop_icons and c in crop_icons else '🌿' }}</span>
+              <span class="crop-name">{{ c | capitalize }}</span>
+            </button>
+            {% endfor %}
+          </div>
+        </div>
+        <div id="cropRecommendation" class="recommendation hidden">
+          <div class="rec-header"><span class="rec-dot"></span><strong id="recTitle"></strong></div>
+          <ul id="recList"></ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. WEATHER CARD -->
+    <div class="weather-card reveal" style="--d:8">
+      <div class="weather-left">
+        <h3>Live Weather</h3>
+        <p id="weatherLocation">Indore, MP</p>
+        <div class="weather-temp" id="weatherTemp">32°C</div>
+        <span class="weather-desc" id="weatherDesc">Sunny</span>
+      </div>
+      <div class="weather-right">
+        <div class="weather-icon">🌤️</div>
+      </div>
+    </div>
+
+    <!-- 7. BANNER SLIDER -->
+    <div class="banner-slider reveal" style="--d:8.5">
+      <div class="banner-slide active">🌾 Best Crop Today: Wheat</div>
+      <div class="banner-slide">🍅 Best Crop Today: Tomato</div>
+      <div class="banner-slide">🥔 Best Crop Today: Potato</div>
+      <div class="banner-slide">🌽 Best Crop Today: Maize</div>
+    </div>
+
+    <!-- 8. STATUS ROW -->
+    <div class="status-row reveal" style="--d:9">
+      <div class="status-card">
+        <div class="status-icon-wrap good">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <div>
+          <div class="status-label">EC Level</div>
+          <div class="status-val" id="val-ec">{{ "%.2f"|format(soil.EC) }} dS/m</div>
+        </div>
+      </div>
+      <div class="status-card">
+        <div class="status-icon-wrap warn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        </div>
+        <div>
+          <div class="status-label">Humidity</div>
+          <div class="status-val" id="val-humid">{{ soil.Humidity }}%</div>
+        </div>
+      </div>
+      <div class="status-card">
+        <div class="status-icon-wrap info">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        </div>
+        <div>
+          <div class="status-label">Last Refreshed</div>
+          <div class="status-val" id="lastUpdatedBar">—</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 9. SMART ALERTS -->
+    <div class="alert-panel reveal" style="--d:10">
+      <h2>Smart Alerts</h2>
+      <div class="alert-item critical">Soil moisture is lower than ideal range.</div>
+      <div class="alert-item warning">Temperature is slightly high for wheat crops.</div>
+      <div class="alert-item success">Nitrogen level is healthy.</div>
+      <div class="alert-item success">pH value is within recommended range.</div>
+    </div>
+
+  </div><!-- /.container -->
+
+  <button class="voice-btn" onclick="startVoiceAssistant()" title="Voice command">🎤</button>
+
+</div><!-- /#dashboard -->
+
+
+<!-- ════════════════════════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════════════════════════ -->
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+  const initialSoil = {{ soil | tojson }};
+
+  // ── Login ────────────────────────────────────────────────
+  function doLogin() {
+    const u = document.getElementById('loginUser').value.trim();
+    const p = document.getElementById('loginPass').value;
+
+    if (u === 'admin' && p === '1234') {
+      const overlay   = document.getElementById('loginOverlay');
+      const dashboard = document.getElementById('dashboard');
+      overlay.style.transition = 'opacity 0.5s ease';
+      overlay.style.opacity    = '0';
+      setTimeout(() => {
+        overlay.style.display   = 'none';
+        dashboard.style.display = 'block';
+        initChart(initialSoil);
+        setTimestamp();
+      }, 500);
+    } else {
+      const err = document.getElementById('loginError');
+      err.style.display = 'block';
+      document.getElementById('loginUser').style.borderColor = '#e05050';
+      document.getElementById('loginPass').style.borderColor = '#e05050';
+      setTimeout(() => {
+        err.style.display = 'none';
+        document.getElementById('loginUser').style.borderColor = '';
+        document.getElementById('loginPass').style.borderColor = '';
+      }, 3000);
+    }
+  }
+
+  // Enter key support
+  ['loginUser', 'loginPass'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+  });
+
+  // ── Logout ───────────────────────────────────────────────
+  function doLogout() {
+    const dashboard = document.getElementById('dashboard');
+    const overlay   = document.getElementById('loginOverlay');
+    dashboard.style.transition = 'opacity 0.4s ease';
+    dashboard.style.opacity    = '0';
+    setTimeout(() => {
+      dashboard.style.display  = 'none';
+      dashboard.style.opacity  = '';
+      overlay.style.display    = 'flex';
+      overlay.style.opacity    = '1';
+      document.getElementById('loginUser').value = '';
+      document.getElementById('loginPass').value = '';
+    }, 400);
+  }
+
+  // ── Crop search ──────────────────────────────────────────
+  function filterCrops() {
+    const q = document.getElementById('cropSearch').value.toLowerCase();
+    document.querySelectorAll('.crop-btn').forEach(btn => {
+      btn.style.display = btn.dataset.name.toLowerCase().includes(q) ? '' : 'none';
+    });
+  }
+</script>
+
+</body>
+</html>
