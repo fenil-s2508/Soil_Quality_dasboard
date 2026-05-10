@@ -3,11 +3,20 @@ from flask import Flask, render_template, jsonify
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
-CHANNEL_ID   = 2966571
-READ_API_KEY = "V7S0QDPMIPXN7WWT"
-THINGSPEAK_URL = (
-    f"https://api.thingspeak.com/channels/{CHANNEL_ID}/feeds.json"
-    f"?api_key={READ_API_KEY}&results=1"
+# Channel A (Temp, Humidity, Moisture)
+CHANNEL_A_ID   = 3376341
+READ_API_KEY_A = "7J1331JJXUSAF2QV"
+URL_A = (
+    f"https://api.thingspeak.com/channels/{CHANNEL_A_ID}/feeds.json"
+    f"?api_key={READ_API_KEY_A}&results=1"
+)
+
+# Channel B (pH, EC, N, P, K)
+CHANNEL_B_ID   = 2966571
+READ_API_KEY_B = "V7S0QDPMIPXN7WWT"
+URL_B = (
+    f"https://api.thingspeak.com/channels/{CHANNEL_B_ID}/feeds.json"
+    f"?api_key={READ_API_KEY_B}&results=1"
 )
 
 CROP_DATA = {
@@ -29,20 +38,33 @@ CROP_DATA = {
 
 FALLBACK_SOIL = {"N":64,"P":69,"K":109,"Temp":29.3,"Humidity":32.7,"pH":7.45,"EC":1.1,"Moisture":327}
 
+def fetch_latest(url):
+    r = requests.get(url, timeout=5)
+    r.raise_for_status()
+    return r.json()["feeds"][0]
+
+def field(latest, key, fallback=0.0):
+    val = latest.get(key)
+    try: return round(float(val), 2) if val not in (None, "") else fallback
+    except: return fallback
+
 def fetch_latest_soil():
     try:
-        r = requests.get(THINGSPEAK_URL, timeout=5)
-        r.raise_for_status()
-        latest = r.json()["feeds"][0]
-        def field(key, fallback=0.0):
-            val = latest.get(key)
-            try: return round(float(val), 2) if val not in (None, "") else fallback
-            except: return fallback
+        latest_a = fetch_latest(URL_A)
+        latest_b = fetch_latest(URL_B)
+
         return {
-            "Moisture": field("field1"), "Temp": field("field2"),
-            "pH": field("field3"),       "EC":   field("field4"),
-            "N":  field("field5"),       "P":    field("field6"),
-            "K":  field("field7"),       "Humidity": FALLBACK_SOIL["Humidity"],
+            # Channel A
+            "Temp":     field(latest_a, "field1"),
+            "Humidity": field(latest_a, "field2"),
+            "Moisture": field(latest_a, "field3"),
+
+            # Channel B
+            "pH": field(latest_b, "field3"),
+            "EC": field(latest_b, "field4"),
+            "N":  field(latest_b, "field5"),
+            "P":  field(latest_b, "field6"),
+            "K":  field(latest_b, "field7"),
         }
     except Exception as e:
         print(f"ThingSpeak error: {e}")
@@ -80,4 +102,3 @@ def recommend_crop(crop):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, debug=True)
-    
